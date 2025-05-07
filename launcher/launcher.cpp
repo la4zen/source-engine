@@ -766,11 +766,11 @@ bool CSourceAppSystemGroup::Create()
 }
 
 bool CSourceAppSystemGroup::PreInit()
-{
+{	
 	if ( !CommandLine()->FindParm( "-nolog" ) )
 		DebugLogger()->Init("engine.log");
 	else
-		DebugLogger()->Disable();
+	DebugLogger()->Disable();
 
 	CreateInterfaceFn factory = GetFactory();
 	ConnectTier1Libraries( &factory, 1 );
@@ -824,7 +824,7 @@ bool CSourceAppSystemGroup::PreInit()
 		reslistgenerator->SetupCommandLine();
 	}
 
-	// FIXME: Logfiles is mod-specific, needs to move into the engine.
+	// FIXME: Logfiles is mod-specifz`ic, needs to move into the engine.
 	g_LogFiles.Init();
 
 	// Required to run through the editor

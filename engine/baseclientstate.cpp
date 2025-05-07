@@ -442,7 +442,7 @@ void CBaseClientState::ConnectionClosing( const char *reason )
 //-----------------------------------------------------------------------------
 bool CBaseClientState::SetSignonState ( int state, int count )
 {
-	//	ConDMsg ("CL_SignonReply: %i\n", cl.signon);
+	// ConDMsg ("CL_SignonReply: %i\n", cl.signon);
 
 	if ( state < SIGNONSTATE_NONE || state > SIGNONSTATE_CHANGELEVEL )
 	{
@@ -586,7 +586,7 @@ bool CBaseClientState::PrepareSteamConnectResponse( uint64 unGSSteamID, bool bGS
 		checkAdr.SetIP( net_local_adr.GetIPHostByteOrder() );
 	}
 
-#if 0 // #ifndef SWDS
+ // #ifndef SWDS
 	// now append the steam3 cookie
 	char steam3Cookie[ STEAM_KEYSIZE ];
 	uint32 steam3CookieLen = 0;
@@ -603,7 +603,7 @@ bool CBaseClientState::PrepareSteamConnectResponse( uint64 unGSSteamID, bool bGS
 	msg.WriteShort( steam3CookieLen );
 	if ( steam3CookieLen > 0 )
 		msg.WriteBytes( steam3Cookie, steam3CookieLen );
-#endif
+
 
 	return true;
 }
@@ -939,7 +939,6 @@ bool CBaseClientState::ProcessConnectionlessPacket( netpacket_t *packet )
 								int authprotocol = msg.ReadLong();
 								uint64 unGSSteamID = 0;
 								bool bGSSecure = false;
-#if 0
 								if ( authprotocol == PROTOCOL_STEAM )
 								{
 									if ( msg.ReadShort() != 0 )
@@ -967,7 +966,7 @@ bool CBaseClientState::ProcessConnectionlessPacket( netpacket_t *packet )
 										return false;
 									}
 								}
-#endif
+
 								SendConnectPacket( challenge, authprotocol, unGSSteamID, bGSSecure );
 							}
 							break;

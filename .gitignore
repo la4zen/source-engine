@@ -36,4 +36,5 @@ build*/
 waf3*/
 .vscode/
 .depproj/
+hl2/
 source-engine.sln

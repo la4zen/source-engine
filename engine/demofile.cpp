@@ -7,7 +7,12 @@
 #include <tier0/dbg.h>
 #include <tier1/strtools.h>
 #include <utlbuffer.h>
-
+#include <windows.h>
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
+#include <vector>
+#include <iostream>
+#include <string>
 #include "demofile.h"
 #include "filesystem_engine.h"
 #include "demo.h"
@@ -425,12 +430,14 @@ demoheader_t *CDemoFile::ReadDemoHeader()
 	bool bOk;
 	Q_memset( &m_DemoHeader, 0, sizeof(m_DemoHeader) );
 
-	if ( !m_pBuffer || !m_pBuffer->IsValid() )
+	if ( !m_pBuffer || !m_pBuffer->IsValid() ) {
+		ConMsg("Invalid m_pBuffer");
 		return NULL;
+	}
 	m_pBuffer->SeekGet( CUtlBuffer::SEEK_HEAD, 0 );
 	m_pBuffer->Get( &m_DemoHeader, sizeof(demoheader_t) );
-	bOk = m_pBuffer->IsValid();
 
+	bOk = m_pBuffer->IsValid();
 	ByteSwap_demoheader_t( m_DemoHeader );
 
 	if ( !bOk )
@@ -530,6 +537,130 @@ bool CDemoFile::Open(const char *name, bool bReadOnly, bool bMemoryBuffer, int n
 
 	return true;
 }
+
+bool CDemoFile::RemoteOpen(const char *filename, int nBufferSize/*=0*/, bool bAllowHeaderWrite/*=true*/)
+{
+	HINTERNET hSession = WinHttpOpen(
+        L"Source 8/0", 
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+        WINHTTP_NO_PROXY_NAME, 
+        WINHTTP_NO_PROXY_BYPASS, 
+        0
+    );
+
+	if (!hSession) {
+        ConMsg("Failed connect to target host\n");
+        return false;
+    }
+
+	HINTERNET hConnect = WinHttpConnect(
+        hSession, 
+        L"127.0.0.1", // ip of remote server
+        3000, // port
+        0
+    );
+
+	if (!hConnect) {
+		ConMsg("Failed connect to target host\n");
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+	HINTERNET hRequest = WinHttpOpenRequest(
+        hConnect,
+        L"GET",
+        L"/",
+        NULL,
+        WINHTTP_NO_REFERER,
+        WINHTTP_DEFAULT_ACCEPT_TYPES,
+		0
+    );
+
+	if (!hRequest) {
+        ConMsg("Failed connect to target host\n");
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+	BOOL bResults = WinHttpSendRequest(
+        hRequest,
+        WINHTTP_NO_ADDITIONAL_HEADERS,
+        0,
+        WINHTTP_NO_REQUEST_DATA,
+        0,
+        0,
+        0
+    );
+	
+	if (!bResults) {
+        ConMsg("Failed connect to target host\n");
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+	bResults = WinHttpReceiveResponse(hRequest, NULL);
+    if (!bResults) {
+        ConMsg("Failed connect to target host\n");
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+	DWORD dwSize = 0;
+    DWORD dwDownloaded = 0;
+    std::vector<BYTE> tempBuffer;
+
+    do {
+        if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) {
+            break;
+        }
+
+        if (dwSize == 0) break;
+
+        tempBuffer.resize(tempBuffer.size() + dwSize);
+        if (!WinHttpReadData(
+            hRequest,
+            &tempBuffer[tempBuffer.size() - dwSize],
+            dwSize,
+            &dwDownloaded
+        )) {
+            break;
+        }
+    } while (dwSize > 0);
+
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+
+    if (tempBuffer.empty()) {
+        ConMsg("No data received\n");
+        return false;
+    }
+	ConMsg("Playing demo from %s...\n", filename);
+
+    m_pBuffer = new CUtlBuffer(tempBuffer.size(), tempBuffer.size(), 0);
+    m_pBuffer->Put(tempBuffer.data(), tempBuffer.size());
+    m_pBuffer->SeekGet(CUtlBuffer::SEEK_HEAD, 0);
+
+    m_szFileName[0] = 0;
+    Q_memset(&m_DemoHeader, 0, sizeof(m_DemoHeader));
+    m_bIsStreamBuffer = false;
+    m_bAllowHeaderWrite = bAllowHeaderWrite;
+    m_pBuffer->SetBigEndian(false);
+    if (!m_pBuffer->IsValid()) {
+        ConMsg("Failed to create valid buffer\n");
+        Close();
+        return false;
+    }
+
+    return true;
+}
+
+
 
 bool CDemoFile::IsOpen()
 {

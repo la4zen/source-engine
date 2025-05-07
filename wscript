@@ -7,8 +7,8 @@ from waflib import Logs, Context, Configure
 import sys
 import os
 
-VERSION = '1.0'
-APPNAME = 'source-engine'
+VERSION = '8.0'
+APPNAME = 'sourcebox'
 top = '.'
 
 FT2_CHECK='''extern "C" {

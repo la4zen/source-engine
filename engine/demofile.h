@@ -39,6 +39,7 @@ public:
 	~CDemoFile();
 
 	bool	Open(const char *name, bool bReadOnly, bool bMemoryBuffer = false, int nBufferSize = 0, bool bAllowHeaderWrite = true);
+	bool 	RemoteOpen(const char *filename, int nBufferSize = 0, bool bAllowHeaderWrite = true);
 	bool	IsOpen();
 	void	Close();
 

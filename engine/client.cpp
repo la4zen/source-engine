@@ -1898,7 +1898,6 @@ void CClientState::ConsistencyCheck(bool bChanged )
 	if ( !bChanged )
 		return;
 
-#if 0
 	// This check was removed as GetSteamUniverse() is very expensive and was getting
 	//	called every frame on Linux. I don't believe it should have been merged over from
 	//	l4d2 in the first place either...
@@ -1908,7 +1907,6 @@ void CClientState::ConsistencyCheck(bool bChanged )
 	{
 		return;
 	}
-#endif
 
 	const char *errorMsg = NULL;
 	const char *errorFilename = NULL;

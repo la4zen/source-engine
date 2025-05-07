@@ -448,29 +448,32 @@ IClient *CBaseServer::ConnectClient ( netadr_t &adr, int protocol, int challenge
 	}
 
 	// Make sure protocols match up
+	/*
 	if ( !CheckProtocol( adr, protocol, clientChallenge ) )
 	{
 		return NULL;
 	}
 
-
+	*/
 	if ( !CheckChallengeNr( adr, challenge ) )
 	{
 		RejectConnection( adr, clientChallenge, "#GameUI_ServerRejectBadChallenge" );
 		return NULL;
 	}
-
+	
 	// SourceTV checks password & restrictions later once we know
 	// if its a normal spectator client or a relay proxy
 	if ( !IsHLTV() && !IsReplay() )
 	{
 #ifndef NO_STEAM
+		/*
 		// LAN servers restrict to class b IP addresses
 		if ( !CheckIPRestrictions( adr, authProtocol ) )
 		{
 			RejectConnection( adr, clientChallenge, "#GameUI_ServerRejectLANRestrict");
 			return NULL;
 		}
+			*/
 #endif
 
 		if ( !CheckPassword( adr, password, name ) )
@@ -664,8 +667,6 @@ bool CBaseServer::ValidInfoChallenge( netadr_t & adr, const char *nugget )
 
 bool CBaseServer::ProcessConnectionlessPacket(netpacket_t * packet)
 {
-	master->ProcessConnectionlessPacket( packet );
-
 	bf_read msg = packet->message;	// handy shortcut 
 
 	char c = msg.ReadChar();
@@ -723,6 +724,7 @@ bool CBaseServer::ProcessConnectionlessPacket(netpacket_t * packet)
 				// checking.
 				const char *pszVersionInP4 = "2000";
 				const char *pszVersionString = GetSteamInfIDVersionInfo().szVersionString;
+				/*
 				if ( V_strcmp( pszVersionString, pszVersionInP4 ) && V_strcmp( productVersion, pszVersionInP4 ) )
 				{
 					int nVersionCheck = Q_strncmp( pszVersionString, productVersion, V_strlen( pszVersionString ) );
@@ -737,6 +739,7 @@ bool CBaseServer::ProcessConnectionlessPacket(netpacket_t * packet)
 						break;
 					}
 				}
+				*/
 
 // 				if ( Steam3Server().BSecure() && bClientPlugins )
 // 				{
@@ -1399,6 +1402,7 @@ Make sure connecting client is using proper protocol
 */
 bool CBaseServer::CheckProtocol( netadr_t &adr, int nProtocol, int clientChallenge )
 {
+	/*
 	if ( nProtocol != PROTOCOL_VERSION )
 	{
 		// Client is newer than server
@@ -1413,6 +1417,7 @@ bool CBaseServer::CheckProtocol( netadr_t &adr, int nProtocol, int clientChallen
 		}
 		return false;
 	}
+		*/
 
 	// Success
 	return true;
@@ -1597,6 +1602,7 @@ float CBaseServer::GetFinalTickTime() const
 
 void CBaseServer::DisconnectClient(IClient *client, const char *reason )
 {
+	ConMsg("Client disconnected with reason: %s\n", reason);
 	client->Disconnect( reason );
 }
 
@@ -2450,7 +2456,7 @@ void CBaseServer::RecalculateTags( void )
 	// Check maxplayers
 	int minmaxplayers = 1;
 	int maxmaxplayers = ABSOLUTE_PLAYER_LIMIT;
-	int defaultmaxplayers = 1;
+	int defaultmaxplayers = 8;
 	serverGameClients->GetPlayerLimits( minmaxplayers, maxmaxplayers, defaultmaxplayers );
 	int nMaxReportedClients = GetMaxClients() - GetNumProxies();
 	if ( sv_visiblemaxplayers.GetInt() > 0 && sv_visiblemaxplayers.GetInt() < nMaxReportedClients )

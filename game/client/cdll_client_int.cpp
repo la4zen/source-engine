@@ -2451,9 +2451,11 @@ void CHLClient::OnDemoPlaybackStart( char const* pDemoBaseName )
 {
 #if defined( REPLAY_ENABLED )
 	// Load any ragdoll override frames from disk
+	ConMsg("RagdollFile");
 	char szRagdollFile[MAX_OSPATH];
 	V_snprintf( szRagdollFile, sizeof(szRagdollFile), "%s.dmx", pDemoBaseName );
 	CReplayRagdollCache::Instance().Init( szRagdollFile );
+	ConMsg("RagdollFileEnd");
 #endif
 }
 
