@@ -12,6 +12,8 @@
 #include "cl_demoactionmanager.h"
 #include "cl_pred.h"
 #include <iostream>
+#include <vector>
+#include <string>
 
 #include "baseautocompletefilelist.h"
 #include "demofile/demoformat.h"
@@ -34,11 +36,19 @@
 #include "con_nprint.h"
 #include "networkstringtableclient.h"
 
+#ifdef WIN32
+#include <windows.h>
+#include <winhttp.h>
+
+#pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "user32.lib")
+#endif
+#include "constants.hpp"
+
 #ifdef SWDS
 #include "server.h"
 #endif
 
-// memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
 static ConVar demo_recordcommands( "demo_recordcommands", "1", FCVAR_CHEAT, "Record commands typed at console into .dem files." );
@@ -2072,7 +2082,7 @@ void CL_ListDemo_f( const CCommand &args )
 	char name[MAX_OSPATH];
 
 	Q_snprintf (name, sizeof(name), "%s", args[1]);
-	
+
 	Q_DefaultExtension( name, ".dem", sizeof( name ) );
 
 	ConMsg ("Demo contents for %s:\n", name);
@@ -2266,6 +2276,125 @@ CON_COMMAND(get, "play remote test demo")
 	}
 }
 
+void CL_SendDemo_f( const CCommand &args ) {
+	if ( cmd_source != src_command ) return;
+
+	if ( args.ArgC() < 2 )
+	{
+		ConMsg("usage: send demo.dem");
+		return;
+	}
+
+	// Get the demo filename
+	char name[MAX_OSPATH];
+	Q_snprintf (name, sizeof(name), "%s", args[1]);
+	Q_DefaultExtension( name, ".dem", sizeof( name ) );
+
+	wchar_t fixed_name[ MAX_OSPATH ];
+	MultiByteToWideChar(CP_ACP, 0, ("hl2/" + std::string(name)).c_str(), -1, fixed_name, MAX_OSPATH);
+
+#ifdef WIN32
+	HANDLE hFile = CreateFileW(
+		fixed_name,
+		GENERIC_READ,
+		FILE_SHARE_READ,
+		NULL,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL
+	);
+
+	if (hFile == INVALID_HANDLE_VALUE) {
+		return;
+	}
+
+	LARGE_INTEGER fileSize;
+	if (!GetFileSizeEx(hFile, &fileSize)) {
+		CloseHandle(hFile);
+		return;
+	}
+
+	std::vector<BYTE> fileData(fileSize.QuadPart);
+	DWORD bytesRead;
+	if (!ReadFile(hFile, fileData.data(), static_cast<DWORD>(fileSize.QuadPart), &bytesRead, NULL)) {
+		CloseHandle(hFile);
+		return;
+	}
+	CloseHandle(hFile);
+
+	wchar_t ip_unicode[16];
+	swprintf_s(ip_unicode, L"%d.%d.%d.%d", 
+			TARGET_HOST[0], TARGET_HOST[1], 
+			TARGET_HOST[2], TARGET_HOST[3]);
+
+	HINTERNET hSession = WinHttpOpen(
+		L"Source 8/0",
+		WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		WINHTTP_NO_PROXY_NAME,
+		WINHTTP_NO_PROXY_BYPASS,
+		0);
+
+	if (!hSession) {
+		return;
+	}
+
+	HINTERNET hConnect = WinHttpConnect(
+		hSession, 
+		ip_unicode,
+		TARGET_HOST[4],
+		0);
+
+	if (!hConnect) {
+		WinHttpCloseHandle(hSession);
+		return;
+	}
+
+
+	HINTERNET hRequest = WinHttpOpenRequest(
+		hConnect,
+		L"POST",
+		L"/",
+		NULL,
+		WINHTTP_NO_REFERER,
+		WINHTTP_DEFAULT_ACCEPT_TYPES,
+		0);
+
+	if (!hRequest) {
+		WinHttpCloseHandle(hConnect);
+		WinHttpCloseHandle(hSession);
+		return;
+	}
+
+	if (!WinHttpSendRequest(
+		hRequest,
+		WINHTTP_NO_ADDITIONAL_HEADERS,
+		0,
+		fileData.data(),
+		bytesRead,
+		bytesRead,
+		0)) {
+		
+		WinHttpCloseHandle(hRequest);
+		WinHttpCloseHandle(hConnect);
+		WinHttpCloseHandle(hSession);
+		return;
+	}
+
+	if (!WinHttpReceiveResponse(hRequest, NULL)) {
+		WinHttpCloseHandle(hRequest);
+		WinHttpCloseHandle(hConnect);
+		WinHttpCloseHandle(hSession);
+		return;
+	}
+
+	WinHttpCloseHandle(hRequest);
+	WinHttpCloseHandle(hConnect);
+	WinHttpCloseHandle(hSession);
+#endif
+	ConMsg("COMMITED\n");
+}
+
+CON_COMMAND_AUTOCOMPLETEFILE( send, CL_SendDemo_f, "send test demo to repo", NULL, dem );
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
@@ -2379,7 +2508,6 @@ CON_COMMAND( vtune, "Controls VTune's sampling." )
 	}
 
 }
-
 
 
 CON_COMMAND_AUTOCOMPLETEFILE( playdemo, CL_PlayDemo_f, "Play a recorded demo file (.dem ).", NULL, dem );

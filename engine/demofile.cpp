@@ -7,12 +7,26 @@
 #include <tier0/dbg.h>
 #include <tier1/strtools.h>
 #include <utlbuffer.h>
-#include <windows.h>
-#include <winhttp.h>
-#pragma comment(lib, "winhttp.lib")
+
+#ifdef WIN32
+	#include <windows.h>
+	#include <winhttp.h>
+	#pragma comment(lib, "winhttp.lib")
+#endif
+#ifdef LINUX
+	#include <curl/curl.h>
+#endif
+
+#include "constants.hpp"
+
 #include <vector>
 #include <iostream>
 #include <string>
+#include <format>
+#include <unordered_map>
+#include <algorithm>
+#include <sstream>
+
 #include "demofile.h"
 #include "filesystem_engine.h"
 #include "demo.h"
@@ -21,7 +35,6 @@
 
 // NOTE: This has to be the last file included!
 #include "tier0/memdbgon.h"
-
 
 void Host_EndGame (bool bShowMainMenu, const char *message, ...);
 
@@ -539,7 +552,13 @@ bool CDemoFile::Open(const char *name, bool bReadOnly, bool bMemoryBuffer, int n
 }
 
 bool CDemoFile::RemoteOpen(const char *filename, int nBufferSize/*=0*/, bool bAllowHeaderWrite/*=true*/)
-{
+{   
+	std::vector<BYTE> tempBuffer;
+	char ip[16];
+	snprintf(ip, sizeof(ip), "%d.%d.%d.%d", 
+        TARGET_HOST[0], TARGET_HOST[1], 
+        TARGET_HOST[2], TARGET_HOST[3]);
+#ifdef WIN32
 	HINTERNET hSession = WinHttpOpen(
         L"Source 8/0", 
         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
@@ -552,11 +571,13 @@ bool CDemoFile::RemoteOpen(const char *filename, int nBufferSize/*=0*/, bool bAl
         ConMsg("Failed connect to target host\n");
         return false;
     }
+	wchar_t ip_unicode[16];
+	MultiByteToWideChar(CP_ACP, 0, ip, -1, ip_unicode, 16);
 
 	HINTERNET hConnect = WinHttpConnect(
         hSession, 
-        L"127.0.0.1", // ip of remote server
-        3000, // port
+        ip_unicode,
+        TARGET_HOST[4],
         0
     );
 
@@ -612,7 +633,6 @@ bool CDemoFile::RemoteOpen(const char *filename, int nBufferSize/*=0*/, bool bAl
 
 	DWORD dwSize = 0;
     DWORD dwDownloaded = 0;
-    std::vector<BYTE> tempBuffer;
 
     do {
         if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) {
@@ -632,17 +652,106 @@ bool CDemoFile::RemoteOpen(const char *filename, int nBufferSize/*=0*/, bool bAl
         }
     } while (dwSize > 0);
 
+	WinHttpQueryHeaders(
+		hRequest,
+		WINHTTP_QUERY_RAW_HEADERS_CRLF,
+		WINHTTP_HEADER_NAME_BY_INDEX,
+		NULL,
+		&dwSize,
+		WINHTTP_NO_HEADER_INDEX
+	);
+
+	wchar_t* headers = new wchar_t[dwSize / sizeof(wchar_t)];
+	std::unordered_map<std::wstring, std::wstring> headersMap;
+
+	if (!WinHttpQueryHeaders(
+		hRequest,
+		WINHTTP_QUERY_RAW_HEADERS_CRLF,
+		WINHTTP_HEADER_NAME_BY_INDEX,
+		headers,
+		&dwSize,
+		WINHTTP_NO_HEADER_INDEX
+	)) {
+		return false;
+	}
+
+	std::wistringstream iss(headers);
+    std::wstring line;
+
+    while (std::getline(iss, line)) {
+        line.erase(std::remove(line.begin(), line.end(), L'\r'), line.end());
+
+        if (line.find(L"HTTP/") == 0) {
+            continue;
+        }
+
+        size_t colonPos = line.find(L": ");
+        if (colonPos == std::wstring::npos) {
+            continue;
+        }
+
+        std::wstring key = line.substr(0, colonPos);
+        std::wstring value = line.substr(colonPos + 2);
+
+        std::transform(key.begin(), key.end(), key.begin(), ::towlower);
+        headersMap[key] = value;
+    }
+	
+	delete[] headers;
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
-
-    if (tempBuffer.empty()) {
-        ConMsg("No data received\n");
-        return false;
+#endif
+#ifdef LINUX
+	CURL* curl = curl_easy_init();
+    
+    if(curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, std::string(ip).c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &tempBuffer);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        
+        CURLcode res = curl_easy_perform(curl);
+        
+        if(res != CURLE_OK) {
+            fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        }
+        
+        curl_easy_cleanup(curl);
     }
-	ConMsg("Playing demo from %s...\n", filename);
+#endif
 
-    m_pBuffer = new CUtlBuffer(tempBuffer.size(), tempBuffer.size(), 0);
+	if (tempBuffer.empty()) {
+		ConMsg("No data received\n");
+		return false;
+	}
+	int size = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        headersMap[L"commit"].c_str(),      
+        -1,
+        nullptr,            
+        0,
+        nullptr,
+        nullptr
+    );
+
+	std::string commited(size, 0);
+
+	WideCharToMultiByte(
+        CP_UTF8, 0,
+        headersMap[L"commit"].c_str(), -1,
+        &commited[0], size,
+        nullptr, nullptr
+    );
+
+	ConMsg("getting socket for %s...\n", filename);
+	ConMsg("extracting data from terminal\n");
+	ConMsg("message from server administrator : COMMITED ");
+	ConMsg(commited.c_str());
+	ConMsg("\nPlaying demo from s.interlope.pull.\n");
+
+	m_pBuffer = new CUtlBuffer(tempBuffer.size(), tempBuffer.size(), 0);
     m_pBuffer->Put(tempBuffer.data(), tempBuffer.size());
     m_pBuffer->SeekGet(CUtlBuffer::SEEK_HEAD, 0);
 
@@ -659,8 +768,6 @@ bool CDemoFile::RemoteOpen(const char *filename, int nBufferSize/*=0*/, bool bAl
 
     return true;
 }
-
-
 
 bool CDemoFile::IsOpen()
 {
