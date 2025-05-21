@@ -145,6 +145,9 @@ bool CVGuiSystemModuleLoader::LoadPlatformModules(CreateInterfaceFn *factorylist
 	KeyValues *menuKeys = kv->FindKey("Menu", true);
 	for (KeyValues *it = menuKeys->GetFirstSubKey(); it != NULL; it = it->GetNextKey())
 	{
+		if ( !Q_stricmp( it->GetString("dll"), "../bin/trackerui.dll" ))
+			continue;
+
 		// see if we should skip steam modules
 		if (!useSteamModules && it->GetInt("SteamApp"))
 			continue;
