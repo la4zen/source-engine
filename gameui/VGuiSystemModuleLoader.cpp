@@ -147,6 +147,8 @@ bool CVGuiSystemModuleLoader::LoadPlatformModules(CreateInterfaceFn *factorylist
 	{
 		if ( !Q_stricmp( it->GetString("dll"), "../bin/trackerui.dll" ))
 			continue;
+		if ( !Q_stricmp( it->GetString("dll"), "../bin/serverbrowser.dll" ))
+			continue;
 
 		// see if we should skip steam modules
 		if (!useSteamModules && it->GetInt("SteamApp"))
