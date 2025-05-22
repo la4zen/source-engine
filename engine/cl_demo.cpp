@@ -11,7 +11,9 @@
 #include "cl_demo.h"
 #include "cl_demoactionmanager.h"
 #include "cl_pred.h"
+#include <cstdio>
 #include <iostream>
+#include <stdio.h>
 #include <vector>
 #include <string>
 
@@ -39,10 +41,14 @@
 #ifdef WIN32
 #include <windows.h>
 #include <winhttp.h>
-
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "user32.lib")
 #endif
+#ifdef LINUX
+#include <curl/curl.h>
+#include <fstream>
+#endif
+
 #include "constants.hpp"
 
 #ifdef SWDS
@@ -2285,15 +2291,13 @@ void CL_SendDemo_f( const CCommand &args ) {
 		return;
 	}
 
-	// Get the demo filename
 	char name[MAX_OSPATH];
 	Q_snprintf (name, sizeof(name), "%s", args[1]);
 	Q_DefaultExtension( name, ".dem", sizeof( name ) );
 
+#ifdef WIN32
 	wchar_t fixed_name[ MAX_OSPATH ];
 	MultiByteToWideChar(CP_ACP, 0, ("hl2/" + std::string(name)).c_str(), -1, fixed_name, MAX_OSPATH);
-
-#ifdef WIN32
 	HANDLE hFile = CreateFileW(
 		fixed_name,
 		GENERIC_READ,
@@ -2390,6 +2394,48 @@ void CL_SendDemo_f( const CCommand &args ) {
 	WinHttpCloseHandle(hRequest);
 	WinHttpCloseHandle(hConnect);
 	WinHttpCloseHandle(hSession);
+#endif
+
+#ifdef LINUX
+	std::vector<BYTE> file_data;
+	CURL* curl = curl_easy_init();
+	std::ifstream file("hl2/" + std::string(name), std::ios::binary | std::ios::ate);
+    if (!file) {
+        return;
+    }
+
+    size_t file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    file_data.resize(file_size);
+	if (!file.read(reinterpret_cast<char*>(file_data.data()), file_size)) {
+        return;
+    }
+
+	char ip[16];
+	snprintf(ip, sizeof(ip),"%d.%d.%d.%d", 
+			TARGET_HOST[0], TARGET_HOST[1], 
+			TARGET_HOST[2], TARGET_HOST[3]);
+    if(!curl) {
+        ConMsg("COMMIT FAILED\n");
+		return;
+    }
+	curl_easy_setopt(curl, CURLOPT_URL, ("http://" + std::string(ip) + ":" + std::to_string(TARGET_HOST[4])).c_str());
+	curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, file_data.data());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, file_data.size());
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Source 8/0");
+	#ifdef DEBUG
+	curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+	#endif
+
+	CURLcode res = curl_easy_perform(curl);
+	curl_easy_cleanup(curl);
+	if(res != CURLE_OK) {
+		ConMsg("COMMIT FAILED\n");
+		return;
+	}
+	
 #endif
 	ConMsg("COMMITED\n");
 }
@@ -2489,6 +2535,7 @@ CON_COMMAND( vtune, "Controls VTune's sampling." )
 		}
 
 		ConMsg("VTune sampling paused.\n");
+
 	}
 
 	else if( !Q_strcasecmp( args[1], "resume" ) )
